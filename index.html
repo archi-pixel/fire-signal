@@ -52,7 +52,7 @@
     const lv = s.cur ? levelOf(s.cur.max) : null;
     const forestTxt = fd === null ? '확인 안 됨(숲 옆으로 보고 판단)' : fd === 0 ? '숲 안' : `약 ${fd}m`;
     const days = s.days.map(d => `<div class="day"><span class="dl">${d.label}</span><div class="slots">${
-      WORK_HOURS.map(h => { const x = d.slots.find(z => z.h === h); if (!x) return `<div class="slot" style="background:#d6d8d3;color:#777">${h}시</div>`;
+      WORK_HOURS.map(h => { const x = d.slots.find(z => z.h === h); if (!x) return `<div class="slot" style="background:#d6d8d3;color:#777">${h}시<small>-</small></div>`;
         const l = levelOf(x.max); return `<div class="slot" style="background:${near ? l.color : '#90a4ae'}">${h}시<small>${l.name}</small></div>`; }).join('')
     }</div></div>`).join('');
     app.innerHTML = head + `
