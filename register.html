@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>현장 QR 만들기 — 산불신호등</title>
+<link rel="stylesheet" href="vendor/leaflet/leaflet.min.css">
+<link rel="stylesheet" href="style.css">
+<style>
+main{max-width:980px}
+#map{height:430px;border-radius:14px;margin-top:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+input[type=text],select{font-size:17px;padding:10px 12px;border:1px solid #c9ccc6;border-radius:10px;min-width:0}
+#name{flex:1;min-width:220px}
+#out{display:none}
+#sheet{background:#fff;border-radius:18px;padding:24px;margin-top:14px;text-align:center}
+#sheet h2{font-size:30px;margin:0 0 4px}
+#sheet .nm{font-size:24px;font-weight:800;margin:6px 0 14px}
+#qr svg{width:260px;height:260px}
+#sheet p{font-size:18px;margin:10px 0 0}
+.info{font-size:17px;line-height:1.7;margin-top:12px}
+@media print{
+  body{background:#fff} header,.no-print,#map,footer{display:none!important}
+  main{max-width:none;padding:0} #sheet{box-shadow:none;margin:30mm auto 0;padding:0}
+  #qr svg{width:90mm;height:90mm} #sheet h2{font-size:34pt} #sheet .nm{font-size:24pt} #sheet p{font-size:16pt}
+}
+</style>
+</head>
+<body>
+<main>
+  <header><h1>현장 QR 만들기 · 감독자용</h1></header>
+  <div class="row no-print">
+    <button class="btn gray" data-go="nsc">자연과학캠퍼스</button>
+    <button class="btn gray" data-go="hsc">인문사회과학캠퍼스</button>
+    <button class="btn gray" id="gps">내 위치</button>
+  </div>
+  <div id="map" class="no-print"></div>
+  <div class="no-print info" id="pick">지도에서 작업 위치를 누르세요. 초록색이 임상도상 숲입니다.</div>
+  <div class="row no-print">
+    <input type="text" id="name" placeholder="현장 이름 (예: 제1공학관 옥상 방수)">
+    <select id="sg"></select>
+    <select id="fsel" style="display:none">
+      <option value="0">숲 바로 옆</option><option value="50">숲에서 100m 안</option><option value="300">숲과 멂</option>
+    </select>
+    <button class="btn" id="make">QR 만들기</button>
+  </div>
+  <section id="out">
+    <div id="sheet">
+      <h2>불티 작업 전 확인</h2>
+      <div class="nm" id="snm"></div>
+      <div id="qr"></div>
+      <p>휴대폰 카메라로 찍으면<br>오늘 이 현장의 산불위험과 할 일이 나옵니다.</p>
+    </div>
+    <div class="row no-print">
+      <button class="btn" onclick="print()">인쇄</button>
+      <a class="btn gray" id="open" target="_blank">현장 화면 열어 보기</a>
+      <input type="text" id="url" readonly style="flex:1;min-width:240px">
+    </div>
+  </section>
+  <footer>숲 위치: 산림청 임상도(1:5,000, 2024) · 산불위험: 산림청 국립산림과학원 산불위험예보정보 · 배경지도 © OpenStreetMap</footer>
+</main>
+<script src="vendor/leaflet/leaflet.min.js"></script>
+<script src="vendor/qrcode.min.js"></script>
+<script src="common.js"></script>
+<script>
+(async function () {
+  const $ = id => document.getElementById(id);
+  const map = L.map('map').setView([CAMPUSES[0].lat, CAMPUSES[0].lng], 16);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
+
+  let fire = null, forest = null, marker = null, pick = null;
+  try { fire = await loadFire(); } catch (e) {}
+  try { const r = await fetch('data/forest.geojson'); if (r.ok) forest = await r.json(); } catch (e) {}
+  if (forest) L.geoJSON(forest, { style: { color: '#2e7d32', weight: 1, fillColor: '#43a047', fillOpacity: .35 }, interactive: false }).addTo(map);
+
+  const regions = fire ? Object.entries(fire.regions).sort((a, b) => a[1].name.localeCompare(b[1].name, 'ko')) : [];
+  $('sg').innerHTML = '<option value="">지역 선택</option>' + regions.map(([c, r]) => `<option value="${c}">${esc(r.name)}</option>`).join('');
+
+  document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => {
+    const c = CAMPUSES.find(x => x.id === b.dataset.go); map.setView([c.lat, c.lng], 16);
+  });
+  $('gps').onclick = () => navigator.geolocation && navigator.geolocation.getCurrentPosition(
+    p => { map.setView([p.coords.latitude, p.coords.longitude], 18); place(p.coords.latitude, p.coords.longitude); },
+    () => alert('위치를 가져오지 못했습니다'), { enableHighAccuracy: true, timeout: 10000 });
+
+  function covered(lat, lng) {
+    return forest && (forest.areas || []).some(a => lng >= a.bbox[0] && lat >= a.bbox[1] && lng <= a.bbox[2] && lat <= a.bbox[3]);
+  }
+  function place(lat, lng) {
+    if (marker) marker.setLatLng([lat, lng]); else marker = L.marker([lat, lng]).addTo(map);
+    const near = CAMPUSES.map(c => ({ c, d: Math.hypot((c.lat - lat) * 111000, (c.lng - lng) * 88000) })).sort((a, b) => a.d - b.d)[0];
+    if (near && near.d < 4000) $('sg').value = near.c.sg;
+    const ok = covered(lat, lng);
+    const fd = ok ? forestDistance(lat, lng, forest) : null;
+    pick = { lat, lng, f: fd };
+    $('fsel').style.display = ok ? 'none' : '';
+    $('pick').innerHTML = ok
+      ? `선택한 위치에서 숲까지 <b>${fd === 0 ? '0m (숲 안)' : '약 ' + fd + 'm'}</b> — ${fd <= NEAR_M ? '숲 옆 현장' : '숲과 먼 현장'}으로 안내합니다.`
+      : '이 위치는 숲 자료 범위 밖입니다. 숲과의 거리를 직접 고르세요.';
+  }
+  map.on('click', e => place(e.latlng.lat, e.latlng.lng));
+
+  $('make').onclick = () => {
+    const n = $('name').value.trim(), sg = $('sg').value;
+    if (!pick) return alert('지도에서 작업 위치를 먼저 누르세요');
+    if (!n) return alert('현장 이름을 적어 주세요');
+    if (!sg) return alert('지역을 골라 주세요');
+    const f = pick.f !== null ? pick.f : Number($('fsel').value);
+    const base = location.href.replace(/register\.html.*$/, '');
+    const url = `${base}?n=${encodeURIComponent(n)}&sg=${sg}&f=${f}&p=${pick.lat.toFixed(5)},${pick.lng.toFixed(5)}`;
+    const qr = qrcode(0, 'M'); qr.addData(url); qr.make();
+    $('qr').innerHTML = qr.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
+    $('snm').textContent = n; $('url').value = url; $('open').href = url;
+    $('out').style.display = 'block'; $('out').scrollIntoView({ behavior: 'smooth' });
+  };
+})();
+</script>
+</body>
+</html>
