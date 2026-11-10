@@ -13,7 +13,8 @@ const FAR = { name: '숲과 먼 곳', color: '#607d8b', todo: '숲과 멀어 평
 const UNKNOWN = { name: '확인 불가', color: '#757575', todo: '예보를 확인할 수 없음 · 감독자에게 확인 후 작업' };
 const NEAR_M = 100;          // 이 거리(m) 안에 숲이 있으면 '숲 옆 현장'으로 봄
 const WORK_HOURS = [9, 12, 15, 18];
-const STALE_H = 12;          // 자료를 받은 지 이 시간이 넘으면 '확인 불가'
+const LATE_H = 12;           // 자료를 받은 지 이 시간이 넘으면 등급은 보여 주되 '늦어짐' 안내
+const STALE_H = 24;          // 이 시간이 넘으면 '확인 불가'
 const WD = '일월화수목금토';
 
 // 기본 현장(캠퍼스 대표 지점)
@@ -64,7 +65,9 @@ function summarize(region, fire, now = new Date()) {
   const next = rows.find(r => r.t > now) || null;
   const near = [prev, next].filter(r => r && Math.abs(r.t - now) <= 6 * 3600e3);
   const cur = near.length ? near.reduce((a, b) => (b.max > a.max ? b : a)) : null;
-  const dataOld = !updated || (now - updated) > STALE_H * 3600e3;
+  const age = updated ? now - updated : Infinity;
+  const dataOld = age > STALE_H * 3600e3;
+  const late = !dataOld && age > LATE_H * 3600e3;
   const days = [];
   for (const r of rows) {
     if (r.t < new Date(now.getTime() - 2 * 3600e3)) continue;
@@ -75,7 +78,7 @@ function summarize(region, fire, now = new Date()) {
     if (!d) { d = { k, t: r.t, label: dayLabel(r.t), slots: [] }; days.push(d); }
     d.slots.push({ h, max: r.max });
   }
-  return { cur, days: days.slice(0, 3), stale: !cur || dataOld, dataOld, updated, latest: rows[rows.length - 1].t };
+  return { cur, days: days.slice(0, 3), stale: !cur || dataOld, dataOld, late, updated, latest: rows[rows.length - 1].t };
 }
 
 // ── 점이 폴리곤 안인지, 숲까지 거리(m) ──

@@ -94,7 +94,8 @@
           ${tel ? `<p style="margin:14px 0 0"><a class="btn" href="tel:${tel}">${esc(t.call)}</a></p>` : ''}
         </section>
         <section class="card"><p class="sub">${esc(t.slots)}</p><div class="days">${days || `<p>${esc(t.noFc)}</p>`}</div></section>
-        ${s.stale ? `<p class="warn">${esc(s.dataOld ? fmt(t.staleOld, { u: fire.updated }) : t.staleNone)} ${esc(t.askSup)}</p>` : ''}
+        ${s.stale ? `<p class="warn">${esc(s.dataOld ? fmt(t.staleOld, { u: fire.updated }) : t.staleNone)} ${esc(t.askSup)}</p>`
+          : s.late ? `<p class="warn">${esc(fmt(t.late, { u: fire.updated }))}</p>` : ''}
       ` + foot;
       return;
     }

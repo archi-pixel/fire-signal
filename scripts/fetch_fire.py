@@ -2,7 +2,7 @@
 """
 산림청 국립산림과학원_산불위험예보정보(공공데이터포털 15084817)에서
 전국 시군구 산불위험예보지수(현재 + 72시간 예보)를 받아 data/fire.json 으로 저장한다.
-GitHub Actions 가 1시간마다 실행한다(사무실 PC 예비 갱신도 같은 파일을 씀).
+GitHub Actions 가 15분마다 확인한다(자료가 2시간 30분 넘었을 때만 받음, 사무실 PC 예비 갱신도 같은 파일을 씀).
 인증키는 환경변수 SERVICE_KEY(저장소 비밀값) 또는 인증키 파일 경로(첫 번째 인자)로만 받는다.
 받은 자료가 온전하지 않으면(행 수가 모자라거나 지역이 너무 적으면) 기존 파일을 그대로 두고 실패로 끝낸다.
 """
@@ -54,6 +54,19 @@ def main():
         key = open(sys.argv[1], encoding="utf-8").read().strip()
     if not key:
         sys.exit("SERVICE_KEY 가 없습니다.")
+
+    # 자주 도는 예약 실행용: 저장된 자료가 이 시간(SKIP_IF_NEWER_H)보다 새것이면 API를 부르지 않고 끝냄
+    fresh_h = float(os.environ.get("SKIP_IF_NEWER_H", "0") or 0)
+    if fresh_h > 0:
+        try:
+            with open(OUT, encoding="utf-8") as f:
+                cur = json.load(f)["updated"]
+            age = datetime.datetime.now(KST) - datetime.datetime.strptime(cur, "%Y-%m-%d %H:%M").replace(tzinfo=KST)
+            if age < datetime.timedelta(hours=fresh_h):
+                print(f"자료가 아직 새것이라 건너뜀 (마지막 저장 {cur})")
+                return
+        except Exception:
+            pass
 
     j = call(key, 1)
     head = (j.get("response") or {}).get("header") or {}
