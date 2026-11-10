@@ -11,34 +11,51 @@
 main{max-width:980px}
 #map{height:430px;border-radius:14px;margin-top:12px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
-input[type=text],input[type=tel],select{font-size:17px;padding:10px 12px;border:1px solid #c9ccc6;border-radius:10px;min-width:0}
+input[type=text],input[type=tel],input[type=search],select{font-size:17px;padding:10px 12px;border:1px solid #c9ccc6;border-radius:10px;min-width:0}
+#q{flex:1;min-width:200px}
 #name{flex:2;min-width:220px} #tel{flex:1;min-width:160px}
+#hits{display:none;background:#fff;border-radius:12px;margin-top:8px;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+#hits button{display:block;width:100%;text-align:left;font:inherit;font-size:16px;border:0;border-bottom:1px solid var(--line);background:none;padding:10px 14px;cursor:pointer}
+#hits button:last-child{border-bottom:0}
+#hits button:hover{background:#f3f6fb}
 #out{display:none}
 #sheet{background:#fff;border-radius:18px;padding:24px;margin-top:14px;text-align:center}
 #sheet h2{font-size:30px;margin:0 0 4px}
 #sheet .nm{font-size:24px;font-weight:800;margin:6px 0 14px}
-#qr svg{width:260px;height:260px}
+#qr svg{width:240px;height:240px}
 #sheet p{font-size:18px;margin:10px 0 0}
+#sheet .langs-note{font-size:14px;color:var(--muted)}
+.tt{margin:16px auto 0;border-collapse:collapse;font-size:16px;text-align:left;max-width:520px;width:100%}
+.tt caption{font-weight:800;font-size:16px;margin-bottom:6px}
+.tt th{color:#fff;white-space:nowrap;padding:6px 10px;border:2px solid #fff;border-radius:8px;width:92px;text-align:center}
+.tt td{padding:6px 10px;border-bottom:1px solid var(--line)}
 .info{font-size:17px;line-height:1.7;margin-top:12px}
 @media (max-width:600px){#map{height:360px}}
 @media print{
-  @page{size:A4;margin:15mm}
-  body{background:#fff} header,.no-print,#map,footer{display:none!important}
-  main{max-width:none;padding:0} #out{display:block!important} #sheet{box-shadow:none;margin:20mm auto 0;padding:0}
-  #qr svg{width:100mm;height:100mm} #sheet h2{font-size:36pt} #sheet .nm{font-size:24pt} #sheet p{font-size:16pt}
+  @page{size:A4;margin:12mm}
+  html,body{background:#fff!important} header,.no-print,#map,footer{display:none!important}
+  main{max-width:none;padding:0} #out{display:block!important} #sheet{box-shadow:none;margin:0 auto;padding:0}
+  #qr svg{width:88mm;height:88mm} #sheet h2{font-size:32pt} #sheet .nm{font-size:22pt;margin:2mm 0 4mm} #sheet p{font-size:14pt;margin-top:3mm}
+  .tt{font-size:13pt;margin-top:6mm} .tt caption{font-size:13pt}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 </style>
 </head>
 <body>
 <main>
   <header><h1>현장 QR 만들기 · 감독자용</h1></header>
+  <form class="row no-print" id="find">
+    <input type="search" id="q" placeholder="주소나 건물 이름 (예: 서부로 2066, 광교산)" autocomplete="off">
+    <button class="btn" type="submit">찾기</button>
+    <button class="btn gray" type="button" id="gps">내 위치</button>
+  </form>
+  <div id="hits" class="no-print"></div>
   <div class="row no-print">
     <button class="btn gray" data-go="nsc">자연과학캠퍼스</button>
     <button class="btn gray" data-go="hsc">인문사회과학캠퍼스</button>
-    <button class="btn gray" id="gps">내 위치</button>
   </div>
   <div id="map" class="no-print"></div>
-  <div class="no-print info" id="pick">지도에서 작업 위치를 누르세요. 초록색이 임상도상 숲입니다.</div>
+  <div class="no-print info" id="pick">지도에서 작업 위치를 누르세요. 전국 어디든 지역은 자동으로 골라지고, 초록색(산림청 임상도 숲)이 보이는 곳은 숲까지 거리도 자동으로 잽니다.</div>
   <div class="row no-print">
     <input type="text" id="name" maxlength="30" placeholder="현장 이름 (예: 제1공학관 옥상 방수)">
     <input type="tel" id="tel" maxlength="15" placeholder="감독자 연락처 (선택)">
@@ -57,6 +74,8 @@ input[type=text],input[type=tel],select{font-size:17px;padding:10px 12px;border:
       <div id="qr"></div>
       <p id="stel" style="font-weight:700"></p>
       <p>휴대폰 카메라로 찍으면<br>오늘 이 현장의 산불위험과 할 일이 나옵니다.</p>
+      <p class="langs-note">English · 中文 · Tiếng Việt · ไทย · Bahasa Indonesia · Русский — 휴대폰 언어로 자동 표시</p>
+      <table class="tt" id="tt"></table>
     </div>
     <div class="row no-print">
       <button class="btn" onclick="print()">인쇄</button>
@@ -64,7 +83,7 @@ input[type=text],input[type=tel],select{font-size:17px;padding:10px 12px;border:
       <input type="text" id="url" readonly style="flex:1;min-width:240px">
     </div>
   </section>
-  <footer>숲 위치: 산림청 임상도(1:5,000, 2024) · 산불위험: 산림청 국립산림과학원 산불위험예보정보 · 배경지도 © OpenStreetMap</footer>
+  <footer>숲 위치: 산림청 임상도(1:5,000, 2024) · 산불위험: 산림청 국립산림과학원 산불위험예보정보 · 배경지도·주소 검색 © OpenStreetMap 기여자(Nominatim)</footer>
 </main>
 <script src="vendor/leaflet/leaflet.min.js"></script>
 <script src="vendor/qrcode.min.js"></script>
@@ -75,14 +94,32 @@ input[type=text],input[type=tel],select{font-size:17px;padding:10px 12px;border:
   const map = L.map('map').setView([CAMPUSES[0].lat, CAMPUSES[0].lng], 16);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
 
-  let fire = null, forest = null, marker = null, pick = null;
-  try { fire = await loadFire(); } catch (e) {}
-  try { const r = await fetch('data/forest.geojson'); if (r.ok) forest = await r.json(); } catch (e) {}
-  if (forest) L.geoJSON({ type: 'FeatureCollection', features: forest.features },
-    { style: { color: '#2e7d32', weight: 1, fillColor: '#43a047', fillOpacity: .35 }, interactive: false }).addTo(map);
+  let fire = null, fIdx = null, marker = null, pick = null, seq = 0;
+  const fCache = {}, shown = {};
+  const getJSON = u => fetch(u).then(r => (r.ok ? r.json() : null)).catch(() => null);
+  const sgPromise = getJSON('data/sigungu.json');                 // 전국 시군구 경계(지역 자동 선택용) — 뒤에서 받음
+  [fire, fIdx] = await Promise.all([loadFire().catch(() => null), getJSON('data/forest/index.json')]);
 
   const regions = fire ? Object.entries(fire.regions).sort((a, b) => a[1].name.localeCompare(b[1].name, 'ko')) : [];
   $('sg').innerHTML = '<option value="">지역 선택</option>' + regions.map(([c, r]) => `<option value="${c}">${esc(r.name)}</option>`).join('');
+  const regionName = c => (fire && hasRegion(fire, c) ? fire.regions[c].name : '');
+
+  // ── 숲 자료: 구별 파일을 필요할 때만 받음 ──
+  const inBox = (b, lat, lng, pad = 0) => lng >= b[0] - pad && lng <= b[2] + pad && lat >= b[1] - pad && lat <= b[3] + pad;
+  function loadArea(code) {
+    if (!fCache[code]) fCache[code] = getJSON(`data/forest/${code}.json`).then(d => {
+      if (d && !shown[code]) shown[code] = L.geoJSON({ type: 'Feature', geometry: d.forest },
+        { style: { color: '#2e7d32', weight: 1, fillColor: '#43a047', fillOpacity: .35 }, interactive: false }).addTo(map);
+      return d;
+    });
+    return fCache[code];
+  }
+  function showAreasInView() {
+    if (!fIdx || map.getZoom() < 13) return;
+    const b = map.getBounds();
+    fIdx.areas.forEach(a => { if (a.b[0] <= b.getEast() && a.b[2] >= b.getWest() && a.b[1] <= b.getNorth() && a.b[3] >= b.getSouth()) loadArea(a.code); });
+  }
+  map.on('moveend', showAreasInView); showAreasInView();
 
   document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => {
     const c = CAMPUSES.find(x => x.id === b.dataset.go); map.setView([c.lat, c.lng], 16);
@@ -94,19 +131,63 @@ input[type=text],input[type=tel],select{font-size:17px;padding:10px 12px;border:
       () => alert('위치를 가져오지 못했습니다'), { enableHighAccuracy: true, timeout: 10000 });
   };
 
-  function place(lat, lng) {
+  // ── 주소·건물 찾기 (OpenStreetMap Nominatim, 누를 때만 1번 요청) ──
+  $('find').onsubmit = async e => {
+    e.preventDefault();
+    const q = $('q').value.trim(), box = $('hits');
+    if (!q) return;
+    const b = map.getBounds();
+    const u = new URL('https://nominatim.openstreetmap.org/search');
+    Object.entries({ q, format: 'jsonv2', countrycodes: 'kr', limit: 5, 'accept-language': 'ko',
+      viewbox: [b.getWest(), b.getNorth(), b.getEast(), b.getSouth()].join(',') }).forEach(([k, v]) => u.searchParams.set(k, v));
+    box.style.display = 'block'; box.innerHTML = '<button type="button" disabled>찾는 중…</button>';
+    let res = null;
+    try { const r = await fetch(u); if (r.ok) res = await r.json(); } catch (err) {}
+    if (!res) { box.innerHTML = '<button type="button" disabled>검색을 못 했습니다. 잠시 뒤 다시 하거나 지도를 직접 움직여 주세요.</button>'; return; }
+    if (!res.length) { box.innerHTML = '<button type="button" disabled>찾는 곳이 없습니다. 도로명 주소나 근처 큰 건물 이름으로 해 보세요.</button>'; return; }
+    box.innerHTML = res.map((r, i) => `<button type="button" data-i="${i}">${esc(r.display_name.split(', ').filter(s => s !== '대한민국' && !/^\d{5}$/.test(s)).slice(0, 6).join(', '))}</button>`).join('');
+    box.querySelectorAll('[data-i]').forEach(btn => btn.onclick = () => {
+      const r = res[+btn.dataset.i], lat = +r.lat, lng = +r.lon;
+      box.style.display = 'none'; map.setView([lat, lng], 17); place(lat, lng);
+    });
+  };
+
+  // ── 작업 위치 고르기 ──
+  async function place(lat, lng) {
+    const my = ++seq;
     if (marker) marker.setLatLng([lat, lng]); else marker = L.marker([lat, lng]).addTo(map);
-    const dist = forest && (forest.districts || []).find(d => inGeometry(lat, lng, d.geometry));
-    if (dist) $('sg').value = dist.properties.fire;            // 숲 자료를 받은 구 안이면 지역은 정해져 있음
-    const ok = !!(forest && forest.coverage && inGeometry(lat, lng, forest.coverage));
-    const fd = ok ? forestDistance(lat, lng, forest) : null;
-    pick = { lat, lng, f: fd };
-    $('fsel').style.display = ok ? 'none' : '';
-    $('pick').innerHTML = ok
-      ? `선택한 위치에서 숲까지 <b>${fd === 0 ? '0m (숲 안)' : '약 ' + fd + 'm'}</b> — ${fd <= NEAR_M ? '숲 옆 현장' : '숲과 먼 현장'}으로 안내합니다.`
-      : '이 위치는 숲 자료 범위 밖입니다. 숲과의 거리와 지역을 직접 고르세요.';
+    $('pick').textContent = '확인 중…';
+    const near = fIdx ? fIdx.areas.filter(a => inBox(a.b, lat, lng, 0.005)) : [];
+    const data = (await Promise.all(near.map(a => loadArea(a.code)))).filter(Boolean);
+    if (my !== seq) return;
+    const area = data.find(d => inGeometry(lat, lng, d.cover));       // 숲 자료 범위 안쪽 100m
+    const fd = area ? forestDistance(lat, lng, { features: data.map(d => ({ geometry: d.forest })) }) : null;
+    const home = area && fd !== null ? area : null;
+    let code = area && area.fire;
+    if (!code) {
+      const sgg = await sgPromise;
+      if (my !== seq) return;
+      const it = sgg && sgg.items.find(i => inBox(i.b, lat, lng) && inGeometry(lat, lng, i.g));
+      code = it && it.c;
+    }
+    const auto = !!(code && hasRegion(fire || { regions: {} }, code));
+    if (auto) $('sg').value = code;
+    pick = { lat, lng, f: home ? fd : null };
+    $('fsel').style.display = home ? 'none' : '';
+    const reg = auto ? `지역 <b>${esc(regionName(code))}</b>(자동 선택${home ? '' : ' · 시군구 경계 근처면 확인'})` : '지역을 아래에서 직접 고르세요';
+    $('pick').innerHTML = home
+      ? `선택한 위치에서 숲까지 <b>${fd === 0 ? '0m (숲 안)' : '약 ' + fd + 'm'}</b> — ${fd <= NEAR_M ? '숲 옆 현장' : '숲과 먼 현장'}으로 안내합니다. · ${reg}`
+      : `이 위치는 숲 자료(임상도)를 넣지 않은 곳입니다. 숲과의 거리를 아래에서 고르세요. · ${reg}`;
   }
   map.on('click', e => place(e.latlng.lat, e.latlng.lng));
+
+  // ── QR 종이: 등급별 할 일 표 ──
+  function todoTable(f) {
+    const row = (c, n, t) => `<tr><th style="background:${c}">${esc(n)}</th><td>${esc(t)}</td></tr>`;
+    if (f > NEAR_M) return `<caption>숲과 먼 현장 (${NEAR_M}m 밖)</caption>` + row(FAR.color, FAR.name, FAR.todo) + row(UNKNOWN.color, UNKNOWN.name, UNKNOWN.todo);
+    return '<caption>산불위험 등급별 할 일 (오늘 등급은 QR로 확인)</caption>'
+      + LEVELS.map(l => row(l.color, l.name, l.todo)).join('') + row(UNKNOWN.color, UNKNOWN.name, UNKNOWN.todo);
+  }
 
   $('make').onclick = () => {
     const n = $('name').value.trim(), sg = $('sg').value, t = $('tel').value.replace(/[^0-9+]/g, '');
@@ -123,6 +204,7 @@ input[type=text],input[type=tel],select{font-size:17px;padding:10px 12px;border:
       $('qr').innerHTML = qr.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
     } catch (e) { return alert('QR을 만들지 못했습니다. 현장 이름을 짧게 해 주세요.'); }
     $('snm').textContent = n; $('stel').textContent = t ? '감독자 연락처 ' + $('tel').value.trim() : ''; $('url').value = url; $('open').href = url;
+    $('tt').innerHTML = todoTable(f);
     $('out').style.display = 'block'; $('out').scrollIntoView({ behavior: 'smooth' });
   };
 })();

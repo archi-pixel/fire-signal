@@ -72,7 +72,7 @@ function summarize(region, fire, now = new Date()) {
     if (!WORK_HOURS.includes(h)) continue;
     const k = dayKey(r.t);
     let d = days.find(x => x.k === k);
-    if (!d) { d = { k, label: dayLabel(r.t), slots: [] }; days.push(d); }
+    if (!d) { d = { k, t: r.t, label: dayLabel(r.t), slots: [] }; days.push(d); }
     d.slots.push({ h, max: r.max });
   }
   return { cur, days: days.slice(0, 3), stale: !cur || dataOld, dataOld, updated, latest: rows[rows.length - 1].t };

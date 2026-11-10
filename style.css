@@ -28,3 +28,13 @@ a{color:#1f5fbf}
 .list a:last-child{border-bottom:0}
 .pill{border-radius:20px;color:#fff;padding:4px 12px;font-size:15px;flex:none}
 .muted{color:var(--muted);font-weight:400}
+.todo-ko{font-size:15px;color:var(--muted);margin-top:6px;line-height:1.4}
+.langs{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 2px}
+.langs button{font:inherit;font-size:14px;border:1px solid var(--line);background:#fff;color:#333;border-radius:16px;padding:5px 10px;cursor:pointer}
+.langs button[aria-current]{background:#333;color:#fff;border-color:#333}
+.day .dl{width:auto;min-width:84px}
+.dot{overflow-wrap:anywhere}
+.lamp>div:last-child{min-width:0}
+.slot{min-width:0}
+.slot small{overflow-wrap:anywhere;hyphens:auto}
+html:lang(zh),html:lang(zh) body{word-break:normal}
