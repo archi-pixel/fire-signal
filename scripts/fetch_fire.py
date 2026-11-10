@@ -2,7 +2,8 @@
 """
 산림청 국립산림과학원_산불위험예보정보(공공데이터포털 15084817)에서
 전국 시군구 산불위험예보지수(현재 + 72시간 예보)를 받아 data/fire.json 으로 저장한다.
-GitHub Actions 가 3시간마다 실행한다. 인증키는 저장소 비밀값 SERVICE_KEY 로만 받는다.
+GitHub Actions 가 1시간마다 실행한다(사무실 PC 예비 갱신도 같은 파일을 씀).
+인증키는 환경변수 SERVICE_KEY(저장소 비밀값) 또는 인증키 파일 경로(첫 번째 인자)로만 받는다.
 받은 자료가 온전하지 않으면(행 수가 모자라거나 지역이 너무 적으면) 기존 파일을 그대로 두고 실패로 끝낸다.
 """
 import os, sys, json, time, math, datetime, urllib.request, urllib.parse
@@ -12,6 +13,7 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "fi
 KST = datetime.timezone(datetime.timedelta(hours=9))
 PAGE = 1000
 MIN_REGIONS = 200
+KEEP_H = 3          # 예보가 그대로면 이 시간까지는 다시 저장하지 않음
 
 
 def call(key, page):
@@ -94,6 +96,16 @@ def main():
         "cols": ["시각", "최댓값", "평균", "낮음%", "다소높음%", "높음%", "매우높음%"],
         "regions": dict(sorted(regions.items())),
     }
+    # 예보 내용이 그대로고 마지막 저장이 3시간 안이면 저장하지 않음(1시간마다 돌아도 올리는 횟수는 줄임)
+    try:
+        with open(OUT, encoding="utf-8") as f:
+            old = json.load(f)
+        old_t = datetime.datetime.strptime(old["updated"], "%Y-%m-%d %H:%M").replace(tzinfo=KST)
+        if old.get("regions") == out["regions"] and datetime.datetime.now(KST) - old_t < datetime.timedelta(hours=KEEP_H):
+            print(f"예보 내용이 그대로라 저장하지 않음 (마지막 저장 {old['updated']})")
+            return
+    except Exception:
+        pass
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     tmp = OUT + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
