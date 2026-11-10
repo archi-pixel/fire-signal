@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>산불신호등 — 불티 작업 전 확인</title>
 <meta name="description" content="산림청 산불위험예보와 임상도로 옥외 불티 작업(용접·절단·그라인더·예초기) 전 현장의 산불위험을 확인합니다.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%23e65100'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -17,24 +18,38 @@
 (async function () {
   const app = document.getElementById('app');
   const q = new URLSearchParams(location.search);
+  const head = '<header><h1>산불신호등 · 불티 작업 전 확인</h1></header>';
   let fire;
   try { fire = await loadFire(); }
-  catch (e) { app.insertAdjacentHTML('beforeend', `<p class="err">${esc(e.message)} — 잠시 뒤 다시 열어 주세요.</p>`); return; }
+  catch (e) { app.innerHTML = head + `<p class="err">${esc(e.message)} — 잠시 뒤 다시 열어 주세요.</p>`; return; }
 
-  const head = '<header><h1>산불신호등 · 불티 작업 전 확인</h1></header>';
   const foot = `<footer>자료: ${esc(fire.source)} · 시군구 안 가장 위험한 곳(최댓값) 기준 · 숲 위치는 산림청 임상도(1:5,000)<br>
     자료 갱신 ${esc(fire.updated)} · 3시간마다 자동 갱신</footer>`;
 
   // ── 현장 화면 (QR로 들어온 경우) ──
-  if (q.get('sg')) {
-    const region = fire.regions[q.get('sg')];
-    const name = q.get('n') || '현장';
-    const fd = q.has('f') && q.get('f') !== '' ? Number(q.get('f')) : null;
-    if (!region) { app.innerHTML = head + `<p class="err">이 현장의 지역 자료가 없습니다.</p>` + foot; return; }
-    const s = summarize(region);
-    const lv = levelOf(s.cur.max);
+  if (q.has('sg')) {
+    const sg = q.get('sg');
+    const name = (q.get('n') || '현장').slice(0, 40);
+    const fRaw = q.get('f');
+    const fNum = fRaw === null || fRaw === '' ? NaN : Number(fRaw);
+    const fd = Number.isFinite(fNum) && fNum >= 0 ? Math.round(fNum) : null;   // 잘못된 값이면 '숲 옆'으로 보고 판단
+    const tel = (q.get('t') || '').replace(/[^0-9+]/g, '').slice(0, 15);
+    const region = hasRegion(fire, sg) ? fire.regions[sg] : null;
+    const s = region && summarize(region, fire);
+    document.title = `${name} — 산불신호등`;
+    if (!s) {
+      app.innerHTML = head + `<div class="site">${esc(name)}</div>
+        <section class="card"><div class="lamp"><div class="dot" style="background:${UNKNOWN.color}">확인<br>불가</div>
+        <div class="todo">${esc(UNKNOWN.todo)}</div></div></section>
+        <p class="err">이 현장의 지역 예보 자료를 찾지 못했습니다. QR을 다시 만들어 주세요.</p>` + foot;
+      return;
+    }
     const near = fd === null || fd <= NEAR_M;
-    const sig = near ? lv : FAR;
+    let sig, label;
+    if (s.stale) { sig = UNKNOWN; label = '확인<br>불가'; }
+    else if (!near) { sig = FAR; label = '숲과<br>먼 곳'; }
+    else { sig = levelOf(s.cur.max); label = sig.name; }
+    const lv = s.cur ? levelOf(s.cur.max) : null;
     const forestTxt = fd === null ? '확인 안 됨(숲 옆으로 보고 판단)' : fd === 0 ? '숲 안' : `약 ${fd}m`;
     const days = s.days.map(d => `<div class="day"><span class="dl">${d.label}</span><div class="slots">${
       WORK_HOURS.map(h => { const x = d.slots.find(z => z.h === h); if (!x) return `<div class="slot" style="background:#d6d8d3;color:#777">${h}시</div>`;
@@ -44,25 +59,25 @@
       <div class="site">${esc(name)}</div>
       <div class="where">${esc(region.name)}</div>
       <section class="card">
-        <div class="lamp"><div class="dot" style="background:${sig.color}">${near ? lv.name : '숲과<br>먼 곳'}</div>
+        <div class="lamp"><div class="dot" style="background:${sig.color}">${label}</div>
           <div class="todo">${esc(sig.todo)}</div></div>
         <ul class="facts">
-          <li>숲까지 <b>${forestTxt}</b>${near ? '' : ` (${NEAR_M}m 밖)`}</li>
-          <li>오늘 지역 산불위험 <b style="color:${lv.color}">${lv.name}</b> · 지수 ${s.cur.max}</li>
+          <li>숲까지 <b>${forestTxt}</b>${!near ? ` (${NEAR_M}m 밖)` : ''}</li>
+          ${lv ? `<li>지역 산불위험 <b style="color:${lv.color}">${lv.name}</b> · 지수 ${s.cur.max} <span class="muted">(${timeLabel(s.cur.t)} 예보)</span></li>` : ''}
         </ul>
+        ${tel ? `<p style="margin:14px 0 0"><a class="btn" href="tel:${tel}">감독자에게 전화</a></p>` : ''}
       </section>
       <section class="card"><p class="sub">작업 시간대 예보</p><div class="days">${days || '<p>예보 자료가 없습니다.</p>'}</div></section>
-      ${s.stale ? `<p class="warn">이 지역은 최근 예보가 갱신되지 않았습니다(마지막 ${esc(dayLabel(s.latest))}). 감독자에게 확인하세요.</p>` : ''}
+      ${s.stale ? `<p class="warn">${s.dataOld ? `예보 자료가 ${esc(fire.updated)} 이후로 갱신되지 않았습니다.` : '이 지역은 지금 시각의 예보가 없습니다.'} 감독자에게 확인하세요.</p>` : ''}
     ` + foot;
-    document.title = `${name} — 산불신호등`;
     return;
   }
 
   // ── 첫 화면: 두 캠퍼스 ──
   const items = CAMPUSES.map(c => {
-    const r = fire.regions[c.sg]; if (!r) return '';
-    const s = summarize(r); const lv = levelOf(s.cur.max);
-    return `<a href="?sg=${c.sg}&n=${encodeURIComponent(c.n)}"><span>${esc(c.n)}<br><small style="font-weight:400;color:#5d6266;font-size:15px">${esc(r.name)}</small></span>
+    const r = hasRegion(fire, c.sg) ? fire.regions[c.sg] : null; const s = r && summarize(r, fire);
+    const lv = s && !s.stale ? levelOf(s.cur.max) : UNKNOWN;
+    return `<a href="?sg=${c.sg}&n=${encodeURIComponent(c.n)}"><span>${esc(c.n)}<br><small class="muted" style="font-weight:400;font-size:15px">${esc(r ? r.name : '')}</small></span>
       <span class="pill" style="background:${lv.color}">${lv.name}</span></a>`;
   }).join('');
   app.innerHTML = head + `

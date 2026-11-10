@@ -26,4 +26,5 @@ a{color:#1f5fbf}
 .btn.gray{background:#e7e9e4;color:#222}
 .list a{display:flex;justify-content:space-between;align-items:center;text-decoration:none;color:inherit;padding:14px 0;border-bottom:1px solid var(--line);font-size:19px;font-weight:700}
 .list a:last-child{border-bottom:0}
-.pill{border-radius:20px;color:#fff;padding:4px 12px;font-size:15px}
+.pill{border-radius:20px;color:#fff;padding:4px 12px;font-size:15px;flex:none}
+.muted{color:var(--muted);font-weight:400}

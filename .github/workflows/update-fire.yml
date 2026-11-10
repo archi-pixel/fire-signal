@@ -2,7 +2,7 @@ name: 산불위험예보 자료 갱신
 
 on:
   schedule:
-    - cron: "20 */3 * * *"   # 3시간마다 (예보는 3·6·9·12·15·18·21·24시에 나옴)
+    - cron: "20 */3 * * *"   # 3시간마다 (한국시간 0:20, 3:20, … 예보는 3시간 간격으로 나옴)
   workflow_dispatch:
 
 permissions:
@@ -15,6 +15,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,5 +30,10 @@ jobs:
           git config user.name "fire-signal-bot"
           git config user.email "actions@users.noreply.github.com"
           git add data/fire.json
-          git diff --cached --quiet || git commit -m "산불위험예보 갱신 $(TZ=Asia/Seoul date '+%m/%d %H:%M')"
-          git push
+          if git diff --cached --quiet; then echo "바뀐 자료 없음"; exit 0; fi
+          git commit -m "산불위험예보 갱신 $(TZ=Asia/Seoul date '+%m/%d %H:%M')"
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push && exit 0
+            sleep 10
+          done
+          exit 1

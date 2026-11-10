@@ -10,8 +10,10 @@ const LEVELS = [
   { max: Infinity, name: '매우높음', color: '#c62828', todo: '숲 옆 불티 작업 멈추고 감독자에게 연락' },
 ];
 const FAR = { name: '숲과 먼 곳', color: '#607d8b', todo: '숲과 멀어 평소 절차대로 작업' };
+const UNKNOWN = { name: '확인 불가', color: '#757575', todo: '예보를 확인할 수 없음 · 감독자에게 확인 후 작업' };
 const NEAR_M = 100;          // 이 거리(m) 안에 숲이 있으면 '숲 옆 현장'으로 봄
 const WORK_HOURS = [9, 12, 15, 18];
+const STALE_H = 12;          // 자료를 받은 지 이 시간이 넘으면 '확인 불가'
 const WD = '일월화수목금토';
 
 // 기본 현장(캠퍼스 대표 지점)
@@ -22,10 +24,12 @@ const CAMPUSES = [
 
 function levelOf(v) { return LEVELS.find(l => v <= l.max); }
 
-function parseKst(t) {               // "2026-11-10 12" → Date
-  const m = String(t).match(/(\d{4})-?(\d{2})-?(\d{2})\D*(\d{1,2})?/);
+function parseKst(t) {               // "2026-11-10 12" 또는 "2026-11-10 14:37" → Date
+  const m = String(t).match(/(\d{4})-?(\d{2})-?(\d{2})\D*(\d{1,2})?(?::(\d{2}))?/);
   if (!m) return null;
-  return new Date(`${m[1]}-${m[2]}-${m[3]}T${String(m[4] || '0').padStart(2, '0')}:00:00+09:00`);
+  const hh = String(m[4] || '0').padStart(2, '0'), mm = m[5] || '00';
+  const d = new Date(`${m[1]}-${m[2]}-${m[3]}T${hh}:${mm}:00+09:00`);
+  return isNaN(d) ? null : d;
 }
 
 function kstParts(d) {
@@ -34,6 +38,7 @@ function kstParts(d) {
 }
 function dayKey(d) { const p = kstParts(d); return `${p.y}-${p.mo}-${p.d}`; }
 function dayLabel(d) { const p = kstParts(d); return `${p.mo}/${p.d}(${WD[p.wd]})`; }
+function timeLabel(d) { const p = kstParts(d); return `${p.mo}/${p.d} ${p.h}시`; }
 
 async function loadFire() {
   const r = await fetch('data/fire.json?v=' + Math.floor(Date.now() / 600000), { cache: 'no-store' });
@@ -41,14 +46,25 @@ async function loadFire() {
   return r.json();
 }
 
+function hasRegion(fire, sg) { return !!sg && Object.prototype.hasOwnProperty.call(fire.regions, sg); }
+
 // 한 시군구의 지금 등급과 앞으로 3일(작업시간) 정리
-function summarize(region, now = new Date()) {
+//  지금 값 = 직전 예보와 다음 예보 중 높은 값(3시간 사이에 위험이 오르는 경우를 놓치지 않도록)
+function summarize(region, fire, now = new Date()) {
+  if (!region || !Array.isArray(region.rows)) return null;
   const rows = region.rows.map(r => ({ t: parseKst(r[0]), max: r[1], avg: r[2], hi: (r[5] || 0) + (r[6] || 0) }))
-    .filter(r => r.t).sort((a, b) => a.t - b.t);
+    .filter(r => r.t && Number.isFinite(r.max)).sort((a, b) => a.t - b.t);
   if (!rows.length) return null;
-  const latest = rows[rows.length - 1].t;
-  const past = rows.filter(r => r.t <= now);
-  const cur = past.length ? past[past.length - 1] : rows[0];
+  // 예보 범위(받은 시점의 현재값 + 72시간)를 넘는 행은 버림 — 범위 밖 값은 기본값으로 채워져 있음
+  const updated = fire && parseKst(fire.updated);
+  const base = (updated && rows.filter(r => r.t <= updated).pop()) || rows[0];
+  const inRange = rows.filter(r => r.t >= base.t && r.t <= new Date(base.t.getTime() + 75 * 3600e3));
+  if (inRange.length) rows.splice(0, rows.length, ...inRange);
+  const prev = rows.filter(r => r.t <= now).pop() || null;
+  const next = rows.find(r => r.t > now) || null;
+  const near = [prev, next].filter(r => r && Math.abs(r.t - now) <= 6 * 3600e3);
+  const cur = near.length ? near.reduce((a, b) => (b.max > a.max ? b : a)) : null;
+  const dataOld = !updated || (now - updated) > STALE_H * 3600e3;
   const days = [];
   for (const r of rows) {
     if (r.t < new Date(now.getTime() - 2 * 3600e3)) continue;
@@ -59,11 +75,10 @@ function summarize(region, now = new Date()) {
     if (!d) { d = { k, label: dayLabel(r.t), slots: [] }; days.push(d); }
     d.slots.push({ h, max: r.max });
   }
-  const stale = (now - latest) > 24 * 3600e3;   // 하루 넘게 새 예보가 없으면 경고
-  return { cur, days: days.slice(0, 3), stale, latest };
+  return { cur, days: days.slice(0, 3), stale: !cur || dataOld, dataOld, updated, latest: rows[rows.length - 1].t };
 }
 
-// ── 숲까지 거리(m): 임상도 숲 경계(GeoJSON)와 점 사이 최단거리, 숲 안이면 0 ──
+// ── 점이 폴리곤 안인지, 숲까지 거리(m) ──
 function toXY(lat, lng, lat0) {
   const R = 6371008.8, rad = Math.PI / 180;
   return [lng * rad * R * Math.cos(lat0 * rad), lat * rad * R];
@@ -83,14 +98,16 @@ function inRing(px, py, ring) {
   }
   return inside;
 }
+function polysOf(g) { return !g ? [] : g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : []; }
+function inGeometry(lat, lng, g) {        // 경위도 그대로 판단(작은 범위라 충분)
+  return polysOf(g).some(poly => inRing(lng, lat, poly[0]) && !poly.slice(1).some(h => inRing(lng, lat, h)));
+}
 function forestDistance(lat, lng, geo) {
   if (!geo || !geo.features) return null;
   const [px, py] = toXY(lat, lng, lat);
   let best = Infinity;
   for (const f of geo.features) {
-    const g = f.geometry; if (!g) continue;
-    const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
-    for (const poly of polys) {
+    for (const poly of polysOf(f.geometry)) {
       const rings = poly.map(r => r.map(([x, y]) => toXY(y, x, lat)));
       if (inRing(px, py, rings[0]) && !rings.slice(1).some(h => inRing(px, py, h))) return 0;
       for (const ring of rings)

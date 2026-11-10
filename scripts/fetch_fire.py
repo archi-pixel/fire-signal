@@ -3,34 +3,47 @@
 산림청 국립산림과학원_산불위험예보정보(공공데이터포털 15084817)에서
 전국 시군구 산불위험예보지수(현재 + 72시간 예보)를 받아 data/fire.json 으로 저장한다.
 GitHub Actions 가 3시간마다 실행한다. 인증키는 저장소 비밀값 SERVICE_KEY 로만 받는다.
+받은 자료가 온전하지 않으면(행 수가 모자라거나 지역이 너무 적으면) 기존 파일을 그대로 두고 실패로 끝낸다.
 """
-import os, sys, json, time, datetime, urllib.request, urllib.parse
+import os, sys, json, time, math, datetime, urllib.request, urllib.parse
 
 API = "https://apis.data.go.kr/1400377/forestPointV2/forestPointListSigunguSearchV2"
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "fire.json")
 KST = datetime.timezone(datetime.timedelta(hours=9))
+PAGE = 1000
+MIN_REGIONS = 200
 
 
 def call(key, page):
-    p = {"ServiceKey": urllib.parse.unquote(key), "pageNo": str(page), "numOfRows": "1000",
+    p = {"ServiceKey": urllib.parse.unquote(key), "pageNo": str(page), "numOfRows": str(PAGE),
          "_type": "json", "excludeForecast": "0"}
     url = API + "?" + urllib.parse.urlencode(p)
+    last = None
     for attempt in range(3):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=60) as r:
                 return json.loads(r.read().decode("utf-8"))
-        except Exception as e:
-            if attempt == 2:
-                raise
-            time.sleep(5)
+        except Exception as e:      # 키는 오류 메시지에 남기지 않음
+            last = type(e).__name__
+            time.sleep(5 * (attempt + 1))
+    raise RuntimeError(f"{page}쪽 받기 실패 ({last})")
 
 
 def num(x):
     try:
-        return round(float(str(x).replace(",", "")))
+        return int(math.floor(float(str(x).replace(",", "")) + 0.5))
     except Exception:
         return None
+
+
+def items_of(j):
+    body = (j.get("response") or {}).get("body") or {}
+    items = body.get("items") or {}
+    items = items.get("item", []) if isinstance(items, dict) else []
+    if isinstance(items, dict):
+        items = [items]
+    return body, items
 
 
 def main():
@@ -39,32 +52,42 @@ def main():
         key = open(sys.argv[1], encoding="utf-8").read().strip()
     if not key:
         sys.exit("SERVICE_KEY 가 없습니다.")
-    regions, page, total = {}, 1, None
-    while True:
-        j = call(key, page)
-        body = j["response"]["body"]
-        total = int(body.get("totalCount") or 0)
-        items = body.get("items") or {}
-        items = items.get("item", []) if isinstance(items, dict) else []
-        if isinstance(items, dict):
-            items = [items]
-        for it in items:
-            code = str(it.get("sigucode") or "")
-            t = str(it.get("analdate") or "")
-            mx = num(it.get("maxi"))
-            if not code or not t or mx is None:
-                continue
-            r = regions.setdefault(code, {"name": f'{it.get("doname", "")} {it.get("sigun", "")}'.strip(), "rows": []})
-            r["rows"].append([t, mx, num(it.get("meanavg")), num(it.get("d1")), num(it.get("d2")),
-                              num(it.get("d3")), num(it.get("d4"))])
-        if page * 1000 >= total or not items:
-            break
+
+    j = call(key, 1)
+    head = (j.get("response") or {}).get("header") or {}
+    if str(head.get("resultCode", "")) not in ("00", "0"):
+        sys.exit(f"API 오류: {head.get('resultCode')} {head.get('resultMsg')}")
+    body, items = items_of(j)
+    total = int(body.get("totalCount") or 0)
+    if total <= 0:
+        sys.exit("전체 건수(totalCount)가 없습니다.")
+    collected = list(items)
+    per_page = max(len(items), 1)
+    page = 1
+    while len(collected) < total and page < math.ceil(total / per_page) + 2:
         page += 1
+        _, items = items_of(call(key, page))
+        if not items:
+            break
+        collected.extend(items)
+
+    regions = {}
+    for it in collected:
+        code = str(it.get("sigucode") or "")
+        t = str(it.get("analdate") or "")
+        mx = num(it.get("maxi"))
+        if not code or not t or mx is None:
+            continue
+        r = regions.setdefault(code, {"name": f'{it.get("doname", "")} {it.get("sigun", "")}'.strip(), "rows": {}})
+        row = [t, mx, num(it.get("meanavg")), num(it.get("d1")), num(it.get("d2")), num(it.get("d3")), num(it.get("d4"))]
+        if t not in r["rows"] or mx > r["rows"][t][1]:       # 같은 시각이 두 번 오면 높은 값을 남김
+            r["rows"][t] = row
     for r in regions.values():
-        r["rows"] = sorted({tuple(x) for x in r["rows"]})
-        r["rows"] = [list(x) for x in r["rows"]]
-    if not regions:
-        sys.exit("받은 자료가 없습니다.")
+        r["rows"] = [r["rows"][t] for t in sorted(r["rows"])]
+
+    if len(collected) < total or len(regions) < MIN_REGIONS:
+        sys.exit(f"자료가 온전하지 않아 저장하지 않음: 행 {len(collected)}/{total}, 지역 {len(regions)}곳")
+
     out = {
         "updated": datetime.datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
         "source": "산림청 국립산림과학원_산불위험예보정보 (공공데이터포털)",
@@ -72,8 +95,10 @@ def main():
         "regions": dict(sorted(regions.items())),
     }
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    with open(OUT, "w", encoding="utf-8") as f:
+    tmp = OUT + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
+    os.replace(tmp, OUT)
     print(f"시군구 {len(regions)}곳, 행 {sum(len(r['rows']) for r in regions.values())}개 저장 (전체 {total})")
 
 
