@@ -33,6 +33,16 @@ a{color:#1f5fbf}
 .langs button{font:inherit;font-size:14px;border:1px solid var(--line);background:#fff;color:#333;border-radius:16px;padding:5px 10px;cursor:pointer}
 .langs button[aria-current]{background:#333;color:#fff;border-color:#333}
 .day .dl{width:auto;min-width:84px}
+.lead{font-size:19px;line-height:1.6;margin:12px 0 0;font-weight:600}
+.exs{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+.ex{display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:16px;padding:16px;text-decoration:none;color:inherit;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.ex:hover{box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.exk{font-size:14px;color:var(--muted);font-weight:700}
+.ext{font-size:19px;line-height:1.35}
+.exs-row{display:flex;gap:10px;align-items:center}
+.exs-row .pill{font-size:16px;font-weight:800;padding:6px 12px}
+.exdo{font-size:17px;font-weight:800;line-height:1.35}
+.exp{font-size:15px;line-height:1.5}
 .dot{overflow-wrap:anywhere}
 .lamp>div:last-child{min-width:0}
 .slot{min-width:0}

@@ -41,10 +41,18 @@
     return `<div class="dot" style="background:${color};font-size:${dotSize(text)}px">${esc(text)}</div>`;
   }
 
+  // 첫 화면 예시 현장(같은 캠퍼스, 숲과의 거리만 다름 — 거리는 임상도로 잰 값)
+  const EXAMPLES = [
+    { title: '운동장 옆 숲 가장자리', n: '예시) 자과캠 운동장 옆', sg: '41110', f: 7 },
+    { title: '캠퍼스 가운데(삼성학술정보관 옆)', n: '예시) 자과캠 삼성학술정보관 옆', sg: '41110', f: 111 },
+  ];
+
   function render() {
-    const t = T[lang];
-    document.documentElement.lang = lang;
-    const head = `<header><h1>${esc(t.title)}</h1></header>` + langBar();
+    const onSite = q.has('sg');
+    const L = onSite ? lang : 'ko';
+    const t = T[L];
+    document.documentElement.lang = L;
+    const head = `<header><h1>${esc(t.title)}</h1></header>` + (onSite ? langBar() : '');
     if (loadErr || !fire) { app.innerHTML = head + `<p class="err">${esc(t.loadErr)}</p>`; return; }
     const foot = `<footer>${esc(fmt(t.foot1, { src: fire.source }))}<br>${esc(fmt(t.foot2, { u: fire.updated }))}</footer>`;
     const koLine = s => lang === 'ko' ? '' : `<div class="todo-ko">${esc(s)}</div>`;
@@ -73,10 +81,11 @@
       const st = lvText(sig, lang);
       const lv = s.cur ? levelOf(s.cur.max) : null;
       const forestTxt = fd === null ? t.forestNone : fd === 0 ? t.forestIn : fmt(t.forestAbout, { d: fd });
+      const nowD = new Date(), todayK = dayKey(nowD), nowH = kstParts(nowD).h;
       const days = s.days.map(d => `<div class="day"><span class="dl">${esc(dayLabelL(d.t, lang))}</span><div class="slots">${
         WORK_HOURS.map(h => {
           const x = d.slots.find(z => z.h === h);
-          if (!x) return `<div class="slot" style="background:#d6d8d3;color:#777">${hourLabel(h, lang)}<small>-</small></div>`;
+          if (!x) return `<div class="slot" style="background:#d6d8d3;color:#777">${hourLabel(h, lang)}<small>${d.k === todayK && h < nowH ? esc(t.past) : '-'}</small></div>`;
           const l = levelOf(x.max);
           return `<div class="slot" style="background:${near ? l.color : '#90a4ae'}">${hourLabel(h, lang)}<small>${esc(lvText(l, lang).name)}</small></div>`;
         }).join('')
@@ -100,18 +109,30 @@
       return;
     }
 
-    // ── 첫 화면: 두 캠퍼스 ──
+    // ── 첫 화면: 무엇인지 한 줄 + 예시 현장 두 곳 비교 ──
     document.title = '산불신호등 — 불티 작업 전 확인';
-    const items = CAMPUSES.map(c => {
-      const r = hasRegion(fire, c.sg) ? fire.regions[c.sg] : null; const s = r && summarize(r, fire);
-      const lv = s && !s.stale ? levelOf(s.cur.max) : UNKNOWN;
-      return `<a href="?sg=${c.sg}&n=${encodeURIComponent(c.n)}"><span>${esc(c.n)}<br><small class="muted" style="font-weight:400;font-size:15px">${esc(r ? r.name : '')}</small></span>
-        <span class="pill" style="background:${lv.color}">${esc(lvText(lv, lang).name)}</span></a>`;
+    const cards = EXAMPLES.map(e => {
+      const r = hasRegion(fire, e.sg) ? fire.regions[e.sg] : null; const s = r && summarize(r, fire);
+      const near = e.f <= NEAR_M;
+      const sig = !s || s.stale ? UNKNOWN : !near ? FAR : levelOf(s.cur.max);
+      let peak = '';
+      if (s && !s.stale) {
+        const all = s.days.flatMap(d => d.slots.map(x => ({ ...x, d: d.label })));
+        const top = all.length ? all.reduce((a, b) => (b.max > a.max ? b : a)) : null;
+        if (top && near) peak = `3일 중 가장 위험할 때: <b style="color:${levelOf(top.max).color}">${esc(levelOf(top.max).name)}</b> · ${esc(top.d)} ${top.h}시`;
+      }
+      return `<a class="ex" href="?sg=${e.sg}&n=${encodeURIComponent(e.n)}&f=${e.f}">
+        <span class="exk">${near ? '숲 옆 현장' : '숲과 먼 현장'} · 숲까지 약 ${e.f}m</span>
+        <b class="ext">${esc(e.title)}</b>
+        <span class="exs-row"><span class="pill" style="background:${sig.color}">${esc(sig.name)}</span><span class="exdo">${esc(sig.todo)}</span></span>
+        ${peak ? `<span class="muted exp">${peak}</span>` : ''}</a>`;
     }).join('');
     app.innerHTML = head + `
-      <section class="card list">${items}</section>
-      <p class="where" style="margin-top:14px">${esc(t.hint)}</p>
-      <p><a class="btn gray" href="register.html">감독자용 · 현장 QR 만들기</a> <a class="btn gray" href="about.html">서비스 소개</a></p>
+      <p class="lead">숲 가까이에서 용접·절단·그라인더·예초기처럼 불티가 나는 작업을 하기 전에, 현장에 붙은 QR을 찍으면 오늘 그 현장의 산불위험과 할 일을 알려 줍니다.</p>
+      <p class="sub" style="margin:18px 0 8px">예시 현장 — 같은 캠퍼스라도 숲과의 거리에 따라 안내가 다릅니다</p>
+      <div class="exs">${cards}</div>
+      <p style="margin-top:18px"><a class="btn" href="register.html">현장 QR 만들기 (감독자)</a> <a class="btn gray" href="about.html">서비스 소개</a></p>
+      <p class="where" style="font-size:15px">외국인 작업자는 휴대폰 언어(영어·중국어·베트남어·태국어·인도네시아어·러시아어)로 자동으로 바뀌어 나옵니다.</p>
     ` + foot;
   }
   render();

@@ -62,9 +62,7 @@ input[type=text],input[type=tel],input[type=search],select{font-size:17px;paddin
   </div>
   <div class="row no-print">
     <select id="sg"></select>
-    <select id="fsel" style="display:none">
-      <option value="0">숲 바로 옆</option><option value="50">숲에서 100m 안</option><option value="300">숲과 멂</option>
-    </select>
+    <select id="fsel" style="display:none" aria-label="숲과의 거리"></select>
     <button class="btn" id="make">QR 만들기</button>
   </div>
   <section id="out">
@@ -173,10 +171,15 @@ input[type=text],input[type=tel],input[type=search],select{font-size:17px;paddin
     const auto = !!(code && hasRegion(fire || { regions: {} }, code));
     if (auto) $('sg').value = code;
     pick = { lat, lng, f: home ? fd : null };
-    $('fsel').style.display = home ? 'none' : '';
+    // 숲과의 거리: 자동 계산값을 기본으로 두되, 현장을 아는 감독자가 바꿀 수 있게
+    const manual = '<option value="0">숲 바로 옆으로 보기</option><option value="50">숲에서 100m 안으로 보기</option><option value="300">숲과 먼 곳으로 보기</option>';
+    $('fsel').innerHTML = home
+      ? `<option value="auto">임상도 자동: 약 ${fd}m (${fd <= NEAR_M ? '숲 옆' : '숲과 멂'})</option>` + manual
+      : '<option value="">숲과의 거리 고르기</option>' + manual;
+    $('fsel').style.display = '';
     const reg = auto ? `지역 <b>${esc(regionName(code))}</b>(자동 선택${home ? '' : ' · 시군구 경계 근처면 확인'})` : '지역을 아래에서 직접 고르세요';
     $('pick').innerHTML = home
-      ? `선택한 위치에서 숲까지 <b>${fd === 0 ? '0m (숲 안)' : '약 ' + fd + 'm'}</b> — ${fd <= NEAR_M ? '숲 옆 현장' : '숲과 먼 현장'}으로 안내합니다. · ${reg}`
+      ? `선택한 위치에서 숲까지 <b>${fd === 0 ? '0m (숲 안)' : '약 ' + fd + 'm'}</b> — ${fd <= NEAR_M ? '숲 옆 현장' : '숲과 먼 현장'}으로 안내합니다. 실제 현장과 다르면 아래에서 바꾸세요. · ${reg}`
       : `이 위치는 숲 자료(임상도)를 넣지 않은 곳입니다. 숲과의 거리를 아래에서 고르세요. · ${reg}`;
   }
   map.on('click', e => place(e.latlng.lat, e.latlng.lng));
@@ -194,7 +197,9 @@ input[type=text],input[type=tel],input[type=search],select{font-size:17px;paddin
     if (!pick) return alert('지도에서 작업 위치를 먼저 누르세요');
     if (!n) return alert('현장 이름을 적어 주세요');
     if (!sg) return alert('지역을 골라 주세요');
-    const f = pick.f !== null ? pick.f : Number($('fsel').value);
+    const fv = $('fsel').value;
+    if (fv === '') return alert('숲과의 거리를 골라 주세요');
+    const f = fv === 'auto' ? pick.f : Number(fv);
     const u = new URL('./', location.href);
     u.searchParams.set('n', n); u.searchParams.set('sg', sg); u.searchParams.set('f', f);
     if (t) u.searchParams.set('t', t);
