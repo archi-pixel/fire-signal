@@ -11,7 +11,7 @@ const LEVELS = [
 ];
 const FAR = { name: '숲과 먼 곳', color: '#607d8b', todo: '숲과 멀어 평소 절차대로 작업' };
 const UNKNOWN = { name: '확인 불가', color: '#757575', todo: '예보를 확인할 수 없음 · 감독자에게 확인 후 작업' };
-const NEAR_M = 100;          // 이 거리(m) 안에 숲이 있으면 '숲 옆 현장'으로 봄
+const NEAR_M = 100;          // 이 거리(m) 안에 숲이 있으면 '숲 옆 현장'으로 봄 — 산림재난방지법 제4조 '산림인접지역'(산림으로부터 100m 이내)과 같은 기준
 const WORK_HOURS = [9, 12, 15, 18];
 const LATE_H = 12;           // 자료를 받은 지 이 시간이 넘으면 등급은 보여 주되 '늦어짐' 안내
 const STALE_H = 24;          // 이 시간이 넘으면 '확인 불가'
