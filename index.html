@@ -85,7 +85,7 @@
       const days = s.days.map(d => `<div class="day"><span class="dl">${esc(dayLabelL(d.t, lang))}</span><div class="slots">${
         WORK_HOURS.map(h => {
           const x = d.slots.find(z => z.h === h);
-          if (!x) return `<div class="slot" style="background:#d6d8d3;color:#777">${hourLabel(h, lang)}<small>${d.k === todayK && h < nowH ? esc(t.past) : '-'}</small></div>`;
+          if (!x) return `<div class="slot" style="background:#d6d8d3;color:#777">${hourLabel(h, lang)}<small>${d.k === todayK && h + 3 <= nowH ? esc(t.past) : '-'}</small></div>`;
           const l = levelOf(x.max);
           return `<div class="slot" style="background:${near ? l.color : '#90a4ae'}">${hourLabel(h, lang)}<small>${esc(lvText(l, lang).name)}</small></div>`;
         }).join('')

@@ -69,14 +69,29 @@ function summarize(region, fire, now = new Date()) {
   const dataOld = age > STALE_H * 3600e3;
   const late = !dataOld && age > LATE_H * 3600e3;
   const days = [];
+  // 예보 시각을 시간표 칸에 넣음: 9시 칸 = 9~11시, 12시 칸 = 12~14시 … (지금 값이 13시처럼 나와도 12시 칸)
   for (const r of rows) {
     if (r.t < new Date(now.getTime() - 2 * 3600e3)) continue;
     const h = kstParts(r.t).h;
-    if (!WORK_HOURS.includes(h)) continue;
+    const w = WORK_HOURS.find(x => h >= x && h < x + 3);
+    if (w === undefined) continue;
     const k = dayKey(r.t);
     let d = days.find(x => x.k === k);
     if (!d) { d = { k, t: r.t, label: dayLabel(r.t), slots: [] }; days.push(d); }
-    d.slots.push({ h, max: r.max });
+    const ex = d.slots.find(z => z.h === w);
+    if (ex) ex.max = Math.max(ex.max, r.max); else d.slots.push({ h: w, max: r.max });
+  }
+  // 예보가 비는 칸(지금 값 바로 다음 칸 등)은 앞뒤 예보 중 높은 값 — 지금 값 판단과 같은 방식
+  for (const d of days) {
+    const p = kstParts(d.t);
+    for (const w of WORK_HOURS) {
+      if (d.slots.some(z => z.h === w)) continue;
+      const ws = new Date(Date.UTC(p.y, p.mo - 1, p.d, w - 9)), we = new Date(ws.getTime() + 3 * 3600e3);
+      if (we <= now) continue;
+      const pv = rows.filter(r => r.t < ws).pop(), nx = rows.find(r => r.t >= we);
+      if (pv && nx && ws - pv.t <= 6 * 3600e3 && nx.t - we <= 6 * 3600e3) d.slots.push({ h: w, max: Math.max(pv.max, nx.max) });
+    }
+    d.slots.sort((a, b) => a.h - b.h);
   }
   return { cur, days: days.slice(0, 3), stale: !cur || dataOld, dataOld, late, updated, latest: rows[rows.length - 1].t };
 }
